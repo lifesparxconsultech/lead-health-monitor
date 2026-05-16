@@ -9,57 +9,86 @@ jobs:
   health-check:
     runs-on: ubuntu-latest
     steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install google-auth google-auth-httplib2 google-api-python-client
+
       - name: Check All Google Sheets
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
+          python3 << 'EOF'
+          import os
+          import json
+          import urllib.request
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
 
-          ALL_HEALTHY=true
-          RESULTS=""
+          # ── Load service account ──────────────────────────────
+          sa_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+          creds = service_account.Credentials.from_service_account_info(
+              sa_info,
+              scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+          )
+          service = build("sheets", "v4", credentials=creds)
 
-          check_sheet() {
-            local NAME=$1
-            local SHEET_ID=$2
-            local URL="https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?key=${GOOGLE_API_KEY}"
-            local RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$URL")
-
-            if [ "$RESP" = "200" ]; then
-              RESULTS="${RESULTS}✅ ${NAME}\n"
-            else
-              RESULTS="${RESULTS}❌ ${NAME} — HTTP ${RESP}\n"
-              ALL_HEALTHY=false
-            fi
+          # ── All your sheets ───────────────────────────────────
+          PROJECTS = {
+              "WILP":         "1qetzRCxPBgnjUUMMBCOY5wWflmD8iyt-LNTcU1WM9QA",
+              "MBA":          "1W1T3dXWxnqwL2v_pbjgwKCFF5mi2qnwHPj8FF1PR1tl",
+              "ISB":          "1lFmcROAflbqvnqGbx5V_orLsMLKUcjI6FpIeDabDR6k",
+              "University":   "1AdtqyEh9BYILNpEooLoRIS8YH6Ekomec9oPspSaavVI",
+              "Bennett":      "1xq1994WQoKTd6mQ8G2z3rjke5WEMQViGR2P-g6_9NSM",
+              "OnlineDegree": "1lsEYnDzzZOOnOVpczY2RGeadYJfhWH2FdWnC3Cgsecj0",
+              "ROI":          "1JzRjbixrpOlkUIVJUIHVuOp1SZaJ_zAT18cxXKLaz0c",
+              "Leads":        "1qMpNOILQNDuk_jR_yq61UF3kOIRpUfR0vdfaAroWUmQ",
           }
 
-          check_sheet "WILP"         "1qetzRCxPBgnjUUMMBCOY5wWflmD8iyt-LNTcU1WM9QA"
-          check_sheet "MBA"          "1W1T3dXWxnqwL2v_pbjgwKCFF5mi2qnwHPj8FF1PR1tl"
-          check_sheet "ISB"          "1lFmcROAflbqvnqGbx5V_orLsMLKUcjI6FpIeDabDR6k"
-          check_sheet "University"   "1AdtqyEh9BYILNpEooLoRIS8YH6Ekomec9oPspSaavVI"
-          check_sheet "Bennett"      "1xq1994WQoKTd6mQ8G2z3rjke5WEMQViGR2P-g6_9NSM"
-          check_sheet "OnlineDegree" "1lsEYnDzzZOOnOVpczY2RGeadYJfhWH2FdWnC3Cgsecj0"
-          check_sheet "ROI"          "1JzRjbixrpOlkUIVJUIHVuOp1SZaJ_zAT18cxXKLaz0c"
-          check_sheet "Leads"        "1qMpNOILQNDuk_jR_yq61UF3kOIRpUfR0vdfaAroWUmQ"
+          # ── Check each sheet ──────────────────────────────────
+          results = []
+          all_healthy = True
 
-          # Build description safely
-          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          DESCRIPTION=$(printf "%b\n🕐 %s" "$RESULTS" "$TIMESTAMP")
+          for name, sheet_id in PROJECTS.items():
+              try:
+                  sheet = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+                  title = sheet.get("properties", {}).get("title", "Unknown")
+                  results.append(f"✅ {name} — {title}")
+              except Exception as e:
+                  results.append(f"❌ {name} — {str(e)[:60]}")
+                  all_healthy = False
 
-          if [ "$ALL_HEALTHY" = "true" ]; then
-            TITLE="✅ All Lead Sheets Healthy"
-            COLOR=65280
-          else
-            TITLE="🚨 Some Sheets Have Issues"
-            COLOR=16711680
-          fi
+          # ── Build Discord message ─────────────────────────────
+          from datetime import datetime, timezone
+          timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+          description = "\n".join(results) + f"\n\n🕐 {timestamp}"
 
-          # Build and send JSON safely via jq
-          PAYLOAD=$(jq -n \
-            --arg title "$TITLE" \
-            --arg desc "$DESCRIPTION" \
-            --argjson color "$COLOR" \
-            '{embeds: [{title: $title, description: $desc, color: $color}]}')
+          title = "✅ All Lead Sheets Healthy" if all_healthy else "🚨 Some Sheets Have Issues"
+          color = 65280 if all_healthy else 16711680
 
-          curl -s -X POST "$DISCORD_WEBHOOK" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
+          payload = json.dumps({
+              "embeds": [{
+                  "title": title,
+                  "description": description,
+                  "color": color
+              }]
+          })
+
+          # ── Send to Discord ───────────────────────────────────
+          webhook_url = os.environ["DISCORD_WEBHOOK"]
+          req = urllib.request.Request(
+              webhook_url,
+              data=payload.encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST"
+          )
+          with urllib.request.urlopen(req) as resp:
+              print(f"Discord response: {resp.status}")
+
+          print("Done!")
+          print(description)
+          EOF
