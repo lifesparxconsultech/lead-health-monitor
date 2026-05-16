@@ -40,13 +40,13 @@ jobs:
           # ── All your sheets ───────────────────────────────────
           PROJECTS = {
               "WILP":         "1qetzRCxPBgnjUUMMBCOY5wWflmD8iyt-LNTcU1WM9QA",
-              "MBA":          "1W1T3dXWxnqwL2v_pbjgwKCFF5mi2qnwHPj8FF1PR1tl",
+              "MBA":          "1W1T3dXWxnqwL2v_pbjgwKCFF5mi2qnwHPj8FF1PR1tI",
               "ISB":          "1lFmcROAflbqvnqGbx5V_orLsMLKUcjI6FpIeDabDR6k",
-              "University":   "1AdtqyEh9BYILNpEooLoRIS8YH6Ekomec9oPspSaavVI",
+              "University":   "1AdtqyEh9BYlLNpEooLoRIS8YH6Ekomec9oPspSaavVI",
               "Bennett":      "1xq1994WQoKTd6mQ8G2z3rjke5WEMQViGR2P-g6_9NSM",
-              "OnlineDegree": "1lsEYnDzzZOOnOVpczY2RGeadYJfhWH2FdWnC3Cgsecj0",
+              "OnlineDegree": "1IsEYnDzZOOnOVpczY2RGeadYJfhWH2FdWnC3Cgsecj0",
               "ROI":          "1JzRjbixrpOlkUIVJUIHVuOp1SZaJ_zAT18cxXKLaz0c",
-              "Leads":        "1qMpNOILQNDuk_jR_yq61UF3kOIRpUfR0vdfaAroWUmQ",
+              "Leads":        "1qMpNOlLQNDuk_jR_yq61UF3kOlRpUfR0vdfaAroWUmQ",
           }
 
           # ── Check each sheet ──────────────────────────────────
@@ -84,7 +84,6 @@ jobs:
           # ── Send to Discord ───────────────────────────────────
           print("Step 3: Sending to Discord...")
           webhook_url = os.environ["DISCORD_WEBHOOK"]
-          print(f"  Webhook URL starts with: {webhook_url[:40]}...")
 
           req = urllib.request.Request(
               webhook_url,
