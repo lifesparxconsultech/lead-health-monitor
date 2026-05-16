@@ -5,29 +5,28 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   health-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install google-auth google-auth-httplib2 google-api-python-client
-
       - name: Check All Google Sheets
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
+          # Install only what we need — no setup-python action needed
+          pip install --quiet google-auth google-api-python-client 2>/dev/null
+
           python3 << 'EOF'
           import os
           import json
           import urllib.request
           from google.oauth2 import service_account
           from googleapiclient.discovery import build
+          from datetime import datetime, timezone
 
           # ── Load service account ──────────────────────────────
           sa_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
@@ -59,14 +58,12 @@ jobs:
                   title = sheet.get("properties", {}).get("title", "Unknown")
                   results.append(f"✅ {name} — {title}")
               except Exception as e:
-                  results.append(f"❌ {name} — {str(e)[:60]}")
+                  results.append(f"❌ {name} — {str(e)[:80]}")
                   all_healthy = False
 
           # ── Build Discord message ─────────────────────────────
-          from datetime import datetime, timezone
           timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
           description = "\n".join(results) + f"\n\n🕐 {timestamp}"
-
           title = "✅ All Lead Sheets Healthy" if all_healthy else "🚨 Some Sheets Have Issues"
           color = 65280 if all_healthy else 16711680
 
@@ -79,16 +76,14 @@ jobs:
           })
 
           # ── Send to Discord ───────────────────────────────────
-          webhook_url = os.environ["DISCORD_WEBHOOK"]
           req = urllib.request.Request(
-              webhook_url,
+              os.environ["DISCORD_WEBHOOK"],
               data=payload.encode("utf-8"),
               headers={"Content-Type": "application/json"},
               method="POST"
           )
           with urllib.request.urlopen(req) as resp:
-              print(f"Discord response: {resp.status}")
+              print(f"Discord: {resp.status}")
 
-          print("Done!")
           print(description)
           EOF
