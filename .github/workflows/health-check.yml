@@ -1,0 +1,60 @@
+name: EduCollege Lead Sheets Health Check
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch:          # manual trigger anytime
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check All Google Sheets
+        run: |
+
+          RESULTS=""
+          ALL_HEALTHY=true
+
+          check_sheet() {
+            local NAME=$1
+            local SHEET_ID=$2
+
+            local URL="https://docs.google.com/spreadsheets/d/$SHEET_ID/edit"
+            local RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL")
+
+            if [ "$RESP" = "200" ] || [ "$RESP" = "302" ]; then
+              RESULTS="$RESULTS\n✅ $NAME"
+            else
+              RESULTS="$RESULTS\n❌ $NAME — HTTP $RESP"
+              ALL_HEALTHY=false
+            fi
+          }
+
+          # ─── All your sheets ─────────────────────────────────────
+          check_sheet "WILP"         "1qetzRCxPBgnjUUMMBCOY5wWflmD8iyt-LNTcU1WM9QA"
+          check_sheet "MBA"          "1W1T3dXWxnqwL2v_pbjgwKCFF5mi2qnwHPj8FF1PR1tl"
+          check_sheet "ISB"          "1lFmcROAflbqvnqGbx5V_orLsMLKUcjI6FpIeDabDR6k"
+          check_sheet "University"   "1AdtqyEh9BYILNpEooLoRIS8YH6Ekomec9oPspSaavVI"
+          check_sheet "Bennett"      "1xq1994WQoKTd6mQ8G2z3rjke5WEMQViGR2P-g6_9NSM"
+          check_sheet "OnlineDegree" "1lsEYnDzzZOOnOVpczY2RGeadYJfhWH2FdWnC3Cgsecj0"
+          check_sheet "ROI"          "1JzRjbixrpOlkUIVJUIHVuOp1SZaJ_zAT18cxXKLaz0c"
+          check_sheet "Leads"        "1qMpNOILQNDuk_jR_yq61UF3kOIRpUfR0vdfaAroWUmQ"
+
+          # ─── Send Discord notification ────────────────────────────
+          if [ "$ALL_HEALTHY" = "true" ]; then
+            TITLE="✅ All Lead Sheets Healthy"
+            COLOR=65280
+          else
+            TITLE="🚨 Some Sheets Have Issues"
+            COLOR=16711680
+          fi
+
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$TITLE\",
+                \"description\": \"$(printf "$RESULTS")\n\n🕐 $(date -u '+%Y-%m-%d %H:%M:%S UTC')\",
+                \"color\": $COLOR
+              }]
+            }"
