@@ -12,6 +12,7 @@ jobs:
       - name: Check All Google Sheets
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
 
           ALL_HEALTHY=true
@@ -20,8 +21,8 @@ jobs:
           check_sheet() {
             local NAME=$1
             local SHEET_ID=$2
-            local URL="https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv"
-            local RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 -L "$URL")
+            local URL="https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?key=${GOOGLE_API_KEY}"
+            local RESP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$URL")
 
             if [ "$RESP" = "200" ]; then
               RESULTS="${RESULTS}✅ ${NAME}\n"
@@ -52,7 +53,7 @@ jobs:
             COLOR=16711680
           fi
 
-          # Use jq to build JSON safely — no broken escaping
+          # Build and send JSON safely via jq
           PAYLOAD=$(jq -n \
             --arg title "$TITLE" \
             --arg desc "$DESCRIPTION" \
