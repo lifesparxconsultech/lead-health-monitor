@@ -17,7 +17,6 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
-          # Install only what we need — no setup-python action needed
           pip install --quiet google-auth google-api-python-client 2>/dev/null
 
           python3 << 'EOF'
@@ -29,12 +28,14 @@ jobs:
           from datetime import datetime, timezone
 
           # ── Load service account ──────────────────────────────
+          print("Step 1: Loading service account...")
           sa_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
           creds = service_account.Credentials.from_service_account_info(
               sa_info,
               scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
           )
           service = build("sheets", "v4", credentials=creds)
+          print("Step 1: Done ✅")
 
           # ── All your sheets ───────────────────────────────────
           PROJECTS = {
@@ -49,6 +50,7 @@ jobs:
           }
 
           # ── Check each sheet ──────────────────────────────────
+          print("Step 2: Checking sheets...")
           results = []
           all_healthy = True
 
@@ -57,9 +59,13 @@ jobs:
                   sheet = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
                   title = sheet.get("properties", {}).get("title", "Unknown")
                   results.append(f"✅ {name} — {title}")
+                  print(f"  ✅ {name}")
               except Exception as e:
                   results.append(f"❌ {name} — {str(e)[:80]}")
+                  print(f"  ❌ {name} — {str(e)[:80]}")
                   all_healthy = False
+
+          print("Step 2: Done ✅")
 
           # ── Build Discord message ─────────────────────────────
           timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -76,14 +82,24 @@ jobs:
           })
 
           # ── Send to Discord ───────────────────────────────────
+          print("Step 3: Sending to Discord...")
+          webhook_url = os.environ["DISCORD_WEBHOOK"]
+          print(f"  Webhook URL starts with: {webhook_url[:40]}...")
+
           req = urllib.request.Request(
-              os.environ["DISCORD_WEBHOOK"],
+              webhook_url,
               data=payload.encode("utf-8"),
               headers={"Content-Type": "application/json"},
               method="POST"
           )
-          with urllib.request.urlopen(req) as resp:
-              print(f"Discord: {resp.status}")
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  print(f"  Discord response: {resp.status} ✅")
+          except Exception as e:
+              print(f"  Discord error: {e}")
+              raise
 
+          print("Step 3: Done ✅")
+          print("\nFull message sent:")
           print(description)
           EOF
