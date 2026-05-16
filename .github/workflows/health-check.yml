@@ -17,12 +17,12 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
-          pip install --quiet google-auth google-api-python-client 2>/dev/null
+          pip install --quiet google-auth google-api-python-client requests 2>/dev/null
 
           python3 << 'EOF'
           import os
           import json
-          import urllib.request
+          import requests
           from google.oauth2 import service_account
           from googleapiclient.discovery import build
           from datetime import datetime, timezone
@@ -73,30 +73,26 @@ jobs:
           title = "✅ All Lead Sheets Healthy" if all_healthy else "🚨 Some Sheets Have Issues"
           color = 65280 if all_healthy else 16711680
 
-          payload = json.dumps({
+          payload = {
               "embeds": [{
                   "title": title,
                   "description": description,
                   "color": color
               }]
-          })
+          }
 
-          # ── Send to Discord ───────────────────────────────────
+          # ── Send to Discord via requests ──────────────────────
           print("Step 3: Sending to Discord...")
-          webhook_url = os.environ["DISCORD_WEBHOOK"]
+          webhook_url = os.environ["DISCORD_WEBHOOK"].strip()
 
-          req = urllib.request.Request(
-              webhook_url,
-              data=payload.encode("utf-8"),
-              headers={"Content-Type": "application/json"},
-              method="POST"
-          )
-          try:
-              with urllib.request.urlopen(req) as resp:
-                  print(f"  Discord response: {resp.status} ✅")
-          except Exception as e:
-              print(f"  Discord error: {e}")
-              raise
+          resp = requests.post(webhook_url, json=payload)
+          print(f"  Discord status: {resp.status_code}")
+
+          if resp.status_code in (200, 204):
+              print("  Discord: ✅ Message sent!")
+          else:
+              print(f"  Discord error body: {resp.text}")
+              raise Exception(f"Discord failed with status {resp.status_code}: {resp.text}")
 
           print("Step 3: Done ✅")
           print("\nFull message sent:")
